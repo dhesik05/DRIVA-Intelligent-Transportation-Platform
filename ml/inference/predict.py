@@ -28,12 +28,38 @@ _SUIT_MODEL: Optional[Dict] = None
 FUEL_MAP = {"DIESEL": 0, "PETROL": 1, "EV": 2}
 PRIORITY_MAP = {"LOW": 0, "NORMAL": 1, "HIGH": 2, "URGENT": 3}
 VEHICLE_ENC = {
-    "Tata Ace": 0, "Bolero Pickup": 1, "Mini Truck": 2, "EV Cargo Van": 3,
-    "Light Commercial": 4, "Medium Truck": 5, "Heavy Truck": 6
+    "Tata Ace": 0,
+    "Bolero Pickup": 1,
+    "Mahindra Bolero Pickup": 1,
+    "Tata Intra V30": 1,
+    "Mini Truck": 2,
+    "EV Cargo Van": 3,
+    "Light Commercial": 4,
+    "Ashok Leyland Dost": 4,
+    "Tata 407": 4,
+    "Medium Truck": 5,
+    "Tata 709": 5,
+    "Eicher Pro 2049": 5,
+    "Tata 1109": 5,
+    "Heavy Truck": 6,
+    "BharatBenz 1217": 6,
 }
 VEHICLE_BASE_COST = {
-    "Tata Ace": 18, "Bolero Pickup": 22, "Mini Truck": 28, "EV Cargo Van": 12,
-    "Light Commercial": 20, "Medium Truck": 35, "Heavy Truck": 55,
+    "Tata Ace": 18,
+    "Bolero Pickup": 22,
+    "Mahindra Bolero Pickup": 22,
+    "Tata Intra V30": 23,
+    "Mini Truck": 28,
+    "EV Cargo Van": 12,
+    "Light Commercial": 20,
+    "Ashok Leyland Dost": 22,
+    "Tata 407": 26,
+    "Medium Truck": 35,
+    "Tata 709": 34,
+    "Eicher Pro 2049": 35,
+    "Tata 1109": 38,
+    "Heavy Truck": 55,
+    "BharatBenz 1217": 52,
 }
 
 

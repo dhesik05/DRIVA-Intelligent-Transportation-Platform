@@ -1,4 +1,4 @@
-// DRIVA TypeScript types — matches backend Pydantic schemas
+// DRIVA TypeScript types — Synchronized with PostgreSQL backend and Pydantic schemas
 
 export type UserRole = 'BUSINESS_OWNER' | 'FLEET_OWNER' | 'LOGISTICS_AGENCY' | 'DRIVER' | 'ADMIN';
 export type VehicleStatus = 'AVAILABLE' | 'ASSIGNED' | 'IN_TRANSIT' | 'MAINTENANCE' | 'OFFLINE';
@@ -27,27 +27,79 @@ export interface Provider {
   id: number;
   user_id: number;
   company_name: string;
+  owner_name?: string;
+  contact_person?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
   service_areas?: string;
   total_vehicles: number;
+  available_vehicles?: number;
+  assigned_vehicles?: number;
   completed_deliveries: number;
   provider_rating: number;
   reliability_score: number;
+  success_rate?: number;
+  verification_status?: string;
   is_active: boolean;
+}
+
+export interface Driver {
+  id: number;
+  name: string;
+  phone?: string;
+  email?: string;
+  license_number?: string;
+  license_type?: string;
+  experience_years: number;
+  rating: number;
+  total_deliveries: number;
+  successful_deliveries: number;
+  is_available: boolean;
+  current_location?: string;
+  provider_id?: number;
+  assigned_vehicle_id?: number;
+  vehicle_registration?: string;
+  assigned_vehicle_reg?: string;
+  provider_name?: string;
 }
 
 export interface Vehicle {
   id: number;
   owner_id: number;
   provider_id?: number;
+  driver_id?: number;
+  registration_number?: string;
   vehicle_number: string;
   vehicle_type: string;
+  make?: string;
+  model?: string;
+  manufacture_year?: number;
   fuel_type: FuelType;
   capacity_kg: number;
+  volume_m3?: number;
   capacity_volume_m3?: number;
-  vehicle_age_years: number;
-  efficiency: number;
+  length_ft?: number;
+  width_ft?: number;
+  height_ft?: number;
   current_location?: string;
+  home_location?: string;
   status: VehicleStatus;
+  availability?: boolean;
+  vehicle_age_years?: number;
+  vehicle_age?: number;
+  mileage?: number;
+  efficiency?: number;
+  fuel_efficiency?: number;
+  rating?: number;
+  total_deliveries?: number;
+  successful_deliveries?: number;
+  insurance_expiry?: string;
+  fitness_expiry?: string;
+  last_service_date?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  provider_name?: string;
   is_active: boolean;
 }
 
@@ -59,6 +111,7 @@ export interface TransportRequest {
   cargo_type: string;
   cargo_weight_kg: number;
   cargo_volume_m3?: number;
+  cargo_dimensions?: string;
   vehicle_type_preference?: string;
   deadline?: string;
   priority: Priority;
@@ -139,8 +192,8 @@ export interface Booking {
   estimated_eta_hours: number;
   match_score?: number;
   status: BookingStatus;
-  commission_rate: number;
-  driva_commission?: number;
+  driva_fee_rate?: number;
+  driva_service_fee?: number;
   created_at: string;
   updated_at: string;
   provider?: Provider;
@@ -165,26 +218,181 @@ export interface TrackingData {
   updates: TrackingUpdate[];
 }
 
-export interface AdminAnalytics {
+export interface DeliveryItem {
+  id: number;
+  request_id: number;
+  booking_id: number;
+  pickup_location: string;
+  destination: string;
+  cargo_type: string;
+  cargo_weight_kg: number;
+  status: string;
+  quoted_price: number;
+  estimated_eta_hours: number;
+  match_score?: number;
+  driva_service_fee?: number;
+  vehicle?: {
+    id: number;
+    type: string;
+    registration: string;
+  };
+  driver?: {
+    id: number;
+    name: string;
+    phone: string;
+  };
+  provider?: {
+    id: number;
+    name: string;
+  };
+  pickup_time?: string;
+  delivered_time?: string;
+  created_at: string;
+}
+
+// ──────────────────────────────────────────
+// Role-specific Dashboard Interfaces
+// ──────────────────────────────────────────
+
+export interface BusinessDashboardData {
+  role: 'BUSINESS_OWNER';
+  business_name: string;
+  contact_person?: string;
+  total_requests: number;
+  active_shipments: number;
+  active_deliveries?: number;
+  completed_deliveries: number;
+  total_spend: number;
+  avg_transport_cost: number;
+  avg_cost_per_delivery?: number;
+  avg_match_score: number;
+  recent_requests: Array<{
+    id: number;
+    pickup_location: string;
+    destination: string;
+    cargo_type: string;
+    cargo_weight_kg: number;
+    cargo_volume_m3?: number;
+    estimated_distance_km?: number;
+    priority: string;
+    status: string;
+    created_at?: string;
+  }>;
+  trend_data?: any[];
+  carrier_performance?: any[];
+}
+
+export interface FleetDashboardData {
+  role: 'FLEET_OWNER';
+  company_name: string;
+  owner_name?: string;
+  city?: string;
+  total_vehicles: number;
+  available_vehicles: number;
+  assigned_vehicles: number;
+  in_transit: number;
+  maintenance_vehicles?: number;
+  offline_vehicles?: number;
+  ev_vehicles: number;
+  diesel_vehicles: number;
+  petrol_vehicles: number;
+  total_drivers: number;
+  available_drivers: number;
+  fleet_utilization: number;
+  completed_deliveries: number;
+  gross_earnings: number;
+  driva_service_fee: number;
+  net_earnings: number;
+  chart_data: Array<{
+    type: string;
+    total: number;
+    active: number;
+    util: string;
+  }>;
+}
+
+export interface AgencyDashboardData {
+  role: 'LOGISTICS_AGENCY';
+  agency_name: string;
+  contact_person?: string;
+  active_requests: number;
+  available_capacity: number;
+  partner_carriers: number;
+  active_shipments: number;
+  completed_shipments: number;
+  total_volume: number;
+  agency_revenue: number;
+  driva_service_fee: number;
+  reliability_score: number;
+}
+
+export interface DriverDashboardData {
+  role: 'DRIVER';
+  driver_name: string;
+  license_number: string;
+  experience_years: number;
+  rating: number;
+  is_available: boolean;
+  current_location: string;
+  assigned_vehicle: {
+    type: string;
+    registration: string;
+    capacity_kg: number;
+    fuel_type: string;
+  };
+  todays_jobs: number;
+  active_delivery?: {
+    booking_id: number;
+    request_id: number;
+    origin: string;
+    destination: string;
+    cargo_type: string;
+    cargo_weight_kg: number;
+    status: string;
+    quoted_price: number;
+    eta_hours: number;
+    payout: number;
+  };
+  completed_jobs: number;
+  gross_earnings: number;
+}
+
+export interface AdminDashboardData {
+  role: 'ADMIN';
   total_users: number;
   total_businesses: number;
   total_fleet_owners: number;
   total_agencies: number;
   total_drivers: number;
   total_vehicles: number;
-  total_bookings: number;
-  total_gmv: number;
-  driva_revenue: number;
-  avg_match_score: number;
-  avg_booking_value: number;
-  active_providers: number;
-}
-
-export interface BusinessAnalytics {
-  total_requests: number;
+  available_vehicles: number;
+  assigned_vehicles: number;
+  in_transit_vehicles: number;
+  maintenance_vehicles?: number;
+  offline_vehicles?: number;
+  pending_requests: number;
   active_deliveries: number;
   completed_deliveries: number;
-  total_spend: number;
-  avg_cost_per_delivery: number;
-  recent_requests: TransportRequest[];
+  total_bookings: number;
+  total_transport_value: number;
+  driva_service_fee: number;
+  avg_match_score: number;
+  avg_eta_hours: number;
+  active_providers: number;
+  total_gmv?: number;
+  driva_revenue?: number;
+  avg_booking_value?: number;
+  trend_data?: any[];
+  carrier_performance?: any[];
 }
+
+export type DashboardSummary =
+  | BusinessDashboardData
+  | FleetDashboardData
+  | AgencyDashboardData
+  | DriverDashboardData
+  | AdminDashboardData;
+
+// Legacy aliases
+export type BusinessAnalytics = BusinessDashboardData;
+export type AdminAnalytics = AdminDashboardData;

@@ -12,21 +12,6 @@ import { analyticsApi } from '../api';
 import type { AdminAnalytics, BusinessAnalytics } from '../types';
 import toast from 'react-hot-toast';
 
-const SPEND_TREND_DATA = [
-  { month: 'Jun', spend: 32000, gmv: 640000, revenue: 32000 },
-  { month: 'Jul', spend: 45000, gmv: 900000, revenue: 45000 },
-  { month: 'Aug', spend: 58000, gmv: 1160000, revenue: 58000 },
-  { month: 'Sep', spend: 52000, gmv: 1040000, revenue: 52000 },
-  { month: 'Oct', spend: 68500, gmv: 1370000, revenue: 68500 },
-];
-
-const CARRIER_PERFORMANCE = [
-  { carrier: 'ABC Logistics', onTime: 96, satisfaction: 94, volume: 42 },
-  { carrier: 'RapidMove', onTime: 93, satisfaction: 91, volume: 35 },
-  { carrier: 'SouthLine', onTime: 90, satisfaction: 89, volume: 28 },
-  { carrier: 'GreenRoute EV', onTime: 92, satisfaction: 87, volume: 22 },
-];
-
 export default function Analytics() {
   const { user } = useAuth();
   const [adminData, setAdminData] = useState<AdminAnalytics | null>(null);
@@ -102,7 +87,7 @@ export default function Analytics() {
               <DollarSign className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">
-              ₹{adminData?.total_gmv ? Math.round(adminData.total_gmv).toLocaleString() : '124,500'}
+              ₹{adminData?.total_transport_value ? Math.round(adminData.total_transport_value).toLocaleString() : adminData?.total_gmv ? Math.round(adminData.total_gmv).toLocaleString() : '124,500'}
             </div>
             <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
               <ArrowUpRight className="w-3 h-3" />
@@ -112,11 +97,11 @@ export default function Analytics() {
 
           <div className="card p-4">
             <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-              <span>DRIVA Service Fee (5%)</span>
+              <span>5% DRIVA Service Fee</span>
               <TrendingUp className="w-4 h-4 text-blue-600" />
             </div>
             <div className="text-2xl font-bold text-blue-700 mt-2">
-              ₹{adminData?.driva_revenue ? Math.round(adminData.driva_revenue).toLocaleString() : '6,225'}
+              ₹{adminData?.driva_service_fee ? Math.round(adminData.driva_service_fee).toLocaleString() : adminData?.driva_revenue ? Math.round(adminData.driva_revenue).toLocaleString() : '6,225'}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">Platform Service Fee Revenue</div>
           </div>
@@ -164,7 +149,7 @@ export default function Analytics() {
               <Truck className="w-4 h-4 text-amber-600" />
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">
-              {bizData?.active_deliveries || 1}
+              {bizData?.active_shipments ?? bizData?.active_deliveries ?? 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">In Transit Along Corridors</div>
           </div>
@@ -175,7 +160,7 @@ export default function Analytics() {
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-bold text-emerald-700 mt-2">
-              {bizData?.completed_deliveries || 4}
+              {bizData?.completed_deliveries ?? 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">100% On-Time Completion</div>
           </div>
@@ -186,7 +171,7 @@ export default function Analytics() {
               <BarChart3 className="w-4 h-4 text-slate-600" />
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">
-              ₹{bizData?.avg_cost_per_delivery ? Math.round(bizData.avg_cost_per_delivery).toLocaleString() : '4,600'}
+              ₹{bizData?.avg_transport_cost ? Math.round(bizData.avg_transport_cost).toLocaleString() : bizData?.avg_cost_per_delivery ? Math.round(bizData.avg_cost_per_delivery).toLocaleString() : '0'}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">Corridor Competitive Rate</div>
           </div>
@@ -208,7 +193,7 @@ export default function Analytics() {
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={SPEND_TREND_DATA}>
+              <BarChart data={viewMode === 'ADMIN' ? adminData?.trend_data : bizData?.trend_data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
                 <YAxis stroke="#64748b" fontSize={11} tickFormatter={(val) => `₹${val / 1000}k`} />
@@ -237,7 +222,7 @@ export default function Analytics() {
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={CARRIER_PERFORMANCE} layout="vertical">
+              <BarChart data={viewMode === 'ADMIN' ? adminData?.carrier_performance : bizData?.carrier_performance} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                 <XAxis type="number" domain={[70, 100]} stroke="#64748b" fontSize={11} unit="%" />
                 <YAxis dataKey="carrier" type="category" stroke="#64748b" fontSize={11} width={100} />

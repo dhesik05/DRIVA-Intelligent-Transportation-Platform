@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import SidebarShell, { NavGroup, NavItem } from './SidebarShell';
+import { useAuth } from '../../hooks/useAuth';
 import {
   LayoutDashboard, ClipboardList, Truck, Sparkles, Package,
   MapPin, Building2, Users, Briefcase, Activity, DollarSign,
@@ -13,46 +14,50 @@ interface AgencySidebarProps {
 
 export default function AgencySidebar({ mobileOpen, onMobileClose }: AgencySidebarProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <SidebarShell
       roleBadge="Agency Ops"
       roleBadgeVariant="indigo"
-      identityTitle="SouthLine Transport Agency"
-      identitySubtitle="Regional Freight Brokerage Network"
-      statusText="High Capacity"
+      identityTitle={user?.name || 'Logistics Agency'}
+      identitySubtitle={user?.email || 'Freight Brokerage Partner'}
+      statusText="Verified"
       statusColor="blue"
       quickAction={{
-        label: "Match Shipments",
+        label: "Match Open Loads",
         icon: Search,
         onClick: () => {
-          navigate('/agency/matching');
+          navigate('/smart-matches');
           onMobileClose?.();
         },
       }}
       mobileOpen={mobileOpen}
       onMobileClose={onMobileClose}
     >
+      <NavGroup title="Main">
+        <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" onClick={onMobileClose} />
+      </NavGroup>
+
       <NavGroup title="Operations">
-        <NavItem to="/agency" icon={LayoutDashboard} label="Agency Overview" onClick={onMobileClose} />
-        <NavItem to="/agency/requests" icon={ClipboardList} label="Transport Requests" badge="8 New" badgeColor="amber" onClick={onMobileClose} />
-        <NavItem to="/agency/capacity" icon={Truck} label="Available Capacity" onClick={onMobileClose} />
-        <NavItem to="/agency/matching" icon={Sparkles} label="Matching Opportunities" badge="Live" badgeColor="emerald" onClick={onMobileClose} />
-        <NavItem to="/agency/bookings" icon={Package} label="Bookings" onClick={onMobileClose} />
-        <NavItem to="/agency/shipments" icon={MapPin} label="Active Shipments" badge="14" badgeColor="blue" onClick={onMobileClose} />
+        <NavItem to="/agency/requests" icon={ClipboardList} label="Transport Requests" onClick={onMobileClose} />
+        <NavItem to="/fleet?status=AVAILABLE" icon={Truck} label="Available Capacity" onClick={onMobileClose} />
+        <NavItem to="/smart-matches" icon={Sparkles} label="Matching Opportunities" onClick={onMobileClose} />
+        <NavItem to="/bookings" icon={Package} label="Bookings" onClick={onMobileClose} />
+        <NavItem to="/bookings" icon={MapPin} label="Active Shipments" onClick={onMobileClose} />
       </NavGroup>
 
       <NavGroup title="Network">
-        <NavItem to="/agency/partners" icon={Building2} label="Fleet Partners" badge="6 Carriers" badgeColor="slate" onClick={onMobileClose} />
-        <NavItem to="/agency/drivers" icon={Users} label="Drivers" onClick={onMobileClose} />
-        <NavItem to="/agency/customers" icon={Briefcase} label="Corporate Customers" onClick={onMobileClose} />
+        <NavItem to="/agency/partners" icon={Building2} label="Fleet Partners" onClick={onMobileClose} />
+        <NavItem to="/fleet/drivers" icon={Users} label="Drivers" onClick={onMobileClose} />
+        <NavItem to="/agency/customers" icon={Briefcase} label="Customers" onClick={onMobileClose} />
       </NavGroup>
 
       <NavGroup title="Performance">
-        <NavItem to="/agency/performance" icon={Activity} label="Delivery Performance" badge="98.4%" badgeColor="emerald" onClick={onMobileClose} />
+        <NavItem to="/agency/performance" icon={Activity} label="Delivery Performance" onClick={onMobileClose} />
         <NavItem to="/agency/revenue" icon={DollarSign} label="Revenue" onClick={onMobileClose} />
         <NavItem to="/agency/reliability" icon={ShieldCheck} label="Provider Reliability" onClick={onMobileClose} />
-        <NavItem to="/agency/analytics" icon={BarChart3} label="Analytics" onClick={onMobileClose} />
+        <NavItem to="/analytics" icon={BarChart3} label="Analytics" onClick={onMobileClose} />
       </NavGroup>
 
       <NavGroup title="Account">

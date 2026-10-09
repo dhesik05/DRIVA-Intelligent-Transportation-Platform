@@ -73,39 +73,79 @@ class ProviderOut(BaseModel):
 # ──────────────────────────────────────────
 
 class VehicleCreate(BaseModel):
-    vehicle_number: str
+    registration_number: Optional[str] = None
+    vehicle_number: Optional[str] = None
     vehicle_type: str
-    fuel_type: FuelType
+    make: Optional[str] = "Tata"
+    model: Optional[str] = "Standard"
+    manufacture_year: Optional[int] = 2023
+    fuel_type: FuelType = FuelType.DIESEL
     capacity_kg: float
+    volume_m3: Optional[float] = 4.0
     capacity_volume_m3: Optional[float] = None
+    length_ft: Optional[float] = 7.0
+    width_ft: Optional[float] = 5.0
+    height_ft: Optional[float] = 5.0
     vehicle_age_years: float = 2.0
+    vehicle_age: Optional[float] = 2.0
+    mileage: Optional[float] = 45000.0
     efficiency: float = 1.0
-    current_location: Optional[str] = None
+    fuel_efficiency: Optional[float] = 14.0
+    current_location: Optional[str] = "Salem Hub"
+    home_location: Optional[str] = "Salem"
+    provider_id: Optional[int] = None
+    driver_id: Optional[int] = None
 
 
 class VehicleUpdate(BaseModel):
     vehicle_type: Optional[str] = None
     fuel_type: Optional[FuelType] = None
     capacity_kg: Optional[float] = None
+    volume_m3: Optional[float] = None
     status: Optional[VehicleStatus] = None
+    availability: Optional[bool] = None
     current_location: Optional[str] = None
+    driver_id: Optional[int] = None
     efficiency: Optional[float] = None
 
 
 class VehicleOut(BaseModel):
     id: int
     owner_id: int
-    provider_id: Optional[int]
+    provider_id: Optional[int] = None
+    driver_id: Optional[int] = None
+    registration_number: Optional[str] = None
     vehicle_number: str
     vehicle_type: str
+    make: Optional[str] = None
+    model: Optional[str] = None
+    manufacture_year: Optional[int] = None
     fuel_type: FuelType
     capacity_kg: float
-    capacity_volume_m3: Optional[float]
-    vehicle_age_years: float
-    efficiency: float
-    current_location: Optional[str]
+    volume_m3: Optional[float] = None
+    capacity_volume_m3: Optional[float] = None
+    length_ft: Optional[float] = None
+    width_ft: Optional[float] = None
+    height_ft: Optional[float] = None
+    current_location: Optional[str] = None
+    home_location: Optional[str] = None
     status: VehicleStatus
-    is_active: bool
+    availability: Optional[bool] = True
+    vehicle_age_years: Optional[float] = 2.0
+    vehicle_age: Optional[float] = 2.0
+    mileage: Optional[float] = 45000.0
+    efficiency: Optional[float] = 1.0
+    fuel_efficiency: Optional[float] = 14.0
+    rating: Optional[float] = 4.7
+    total_deliveries: Optional[int] = 0
+    successful_deliveries: Optional[int] = 0
+    insurance_expiry: Optional[str] = None
+    fitness_expiry: Optional[str] = None
+    last_service_date: Optional[str] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    provider_name: Optional[str] = None
+    is_active: bool = True
 
     class Config:
         from_attributes = True
@@ -290,8 +330,8 @@ class BookingOut(BaseModel):
     estimated_eta_hours: float
     match_score: Optional[float]
     status: BookingStatus
-    commission_rate: float
-    driva_commission: Optional[float]
+    driva_fee_rate: float
+    driva_service_fee: Optional[float]
     created_at: datetime
     updated_at: datetime
 
@@ -359,12 +399,24 @@ class AdminAnalytics(BaseModel):
     total_agencies: int
     total_drivers: int
     total_vehicles: int
+    available_vehicles: int = 0
+    assigned_vehicles: int = 0
+    in_transit_vehicles: int = 0
+    maintenance_vehicles: int = 0
+    pending_requests: int = 0
+    active_deliveries: int = 0
+    completed_deliveries: int = 0
     total_bookings: int
     total_gmv: float
+    total_transport_value: float = 0.0
     driva_revenue: float
+    driva_service_fee: float = 0.0
     avg_match_score: float
     avg_booking_value: float
+    avg_eta_hours: float = 0.0
     active_providers: int
+    trend_data: List[dict] = []
+    carrier_performance: List[dict] = []
 
 
 class BusinessAnalytics(BaseModel):
@@ -374,6 +426,8 @@ class BusinessAnalytics(BaseModel):
     total_spend: float
     avg_cost_per_delivery: float
     recent_requests: List[TransportRequestOut]
+    trend_data: List[dict] = []
+    carrier_performance: List[dict] = []
 
 
 # ──────────────────────────────────────────

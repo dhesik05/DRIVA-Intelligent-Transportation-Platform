@@ -23,6 +23,11 @@ class UserRole(str, enum.Enum):
     ADMIN = "ADMIN"
 
 
+class ProviderType(str, enum.Enum):
+    FLEET_OWNER = "FLEET_OWNER"
+    LOGISTICS_AGENCY = "LOGISTICS_AGENCY"
+
+
 class VehicleStatus(str, enum.Enum):
     AVAILABLE = "AVAILABLE"
     ASSIGNED = "ASSIGNED"
@@ -81,15 +86,42 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    business_profile = relationship("BusinessProfile", back_populates="user", uselist=False)
     transport_requests = relationship("TransportRequest", back_populates="business", foreign_keys="TransportRequest.business_id")
-    vehicles = relationship("Vehicle", back_populates="owner")
-    driver_profile = relationship("Driver", back_populates="user", uselist=False)
-    provider_profile = relationship("Provider", back_populates="user", uselist=False)
+    vehicles = relationship("Vehicle", back_populates="owner", foreign_keys="Vehicle.owner_id")
+    driver_profile = relationship("Driver", back_populates="user", uselist=False, foreign_keys="Driver.user_id")
+    provider_profile = relationship("Provider", back_populates="user", uselist=False, foreign_keys="Provider.user_id")
     ratings_given = relationship("Rating", back_populates="rater", foreign_keys="Rating.rater_id")
+    notifications = relationship("Notification", back_populates="user")
 
 
 # ──────────────────────────────────────────
-# Provider (Agency or Fleet Owner)
+# Business Profile
+# ──────────────────────────────────────────
+
+class BusinessProfile(Base):
+    __tablename__ = "business_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    business_name = Column(String(255), nullable=False)
+    contact_person = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    city = Column(String(100), nullable=True)
+    industry = Column(String(100), nullable=True)
+    total_requests = Column(Integer, default=0)
+    active_shipments = Column(Integer, default=0)
+    completed_shipments = Column(Integer, default=0)
+    total_spend = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="business_profile")
+
+
+# ──────────────────────────────────────────
+# Provider (Fleet Owner or Logistics Agency)
 # ──────────────────────────────────────────
 
 class Provider(Base):
@@ -97,17 +129,31 @@ class Provider(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider_type = Column(SAEnum(ProviderType), default=ProviderType.FLEET_OWNER)
     company_name = Column(String(255), nullable=False)
+    owner_name = Column(String(255), nullable=True)
+    contact_person = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    city = Column(String(100), nullable=True)
     service_areas = Column(Text, nullable=True)  # comma-separated
     total_vehicles = Column(Integer, default=0)
+    available_vehicles = Column(Integer, default=0)
+    assigned_vehicles = Column(Integer, default=0)
     completed_deliveries = Column(Integer, default=0)
-    provider_rating = Column(Float, default=4.0)
-    reliability_score = Column(Float, default=90.0)  # 0-100
+    provider_rating = Column(Float, default=4.5)
+    reliability_score = Column(Float, default=92.0)  # 0-100
+    success_rate = Column(Float, default=95.0)  # percentage
+    verification_status = Column(String(50), default="VERIFIED")
+    fleet_capacity = Column(String(100), nullable=True)
+    active_shipments = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="provider_profile")
-    vehicles = relationship("Vehicle", back_populates="provider")
+    vehicles = relationship("Vehicle", back_populates="provider", foreign_keys="Vehicle.provider_id")
+    drivers = relationship("Driver", back_populates="provider", foreign_keys="Driver.provider_id")
     bookings = relationship("Booking", back_populates="provider")
 
 
@@ -119,16 +165,28 @@ class Driver(Base):
     __tablename__ = "drivers"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
+    assigned_vehicle_id = Column(Integer, ForeignKey("vehicles.id", use_alter=True, name="fk_drivers_vehicle_id"), nullable=True)
+
+    name = Column(String(255), nullable=False, default="Driver")
+    phone = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)
     license_number = Column(String(50), nullable=True)
-    experience_years = Column(Float, default=1.0)
+    license_type = Column(String(50), default="Commercial HMV")
+    experience_years = Column(Float, default=3.0)
+    rating = Column(Float, default=4.5)
+    total_deliveries = Column(Integer, default=0)
+    successful_deliveries = Column(Integer, default=0)
+    completed_trips = Column(Integer, default=0)
     is_available = Column(Boolean, default=True)
     current_location = Column(String(255), nullable=True)
-    rating = Column(Float, default=4.0)
-    completed_trips = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="driver_profile")
+    provider = relationship("Provider", back_populates="drivers", foreign_keys=[provider_id])
+    assigned_vehicle = relationship("Vehicle", foreign_keys=[assigned_vehicle_id], post_update=True)
     bookings = relationship("Booking", back_populates="driver")
 
 
@@ -142,22 +200,53 @@ class Vehicle(Base):
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
-    vehicle_number = Column(String(50), unique=True, nullable=False)
-    vehicle_type = Column(String(100), nullable=False)  # Tata Ace, Mini Truck, etc.
+    driver_id = Column(Integer, ForeignKey("drivers.id", use_alter=True, name="fk_vehicles_driver_id"), nullable=True)
+
+    registration_number = Column(String(50), unique=True, index=True, nullable=False)
+    vehicle_number = Column(String(50), nullable=False)
+    vehicle_type = Column(String(100), nullable=False)  # Tata Ace, Mahindra Bolero Pickup, etc.
+    make = Column(String(100), default="Tata")
+    model = Column(String(100), default="Standard")
+    manufacture_year = Column(Integer, default=2022)
     fuel_type = Column(SAEnum(FuelType), nullable=False, default=FuelType.DIESEL)
+
     capacity_kg = Column(Float, nullable=False)
-    capacity_volume_m3 = Column(Float, nullable=True)
-    vehicle_age_years = Column(Float, default=2.0)
-    efficiency = Column(Float, default=1.0)  # higher = more efficient
+    volume_m3 = Column(Float, default=4.0)
+    capacity_volume_m3 = Column(Float, nullable=True)  # legacy sync
+
+    length_ft = Column(Float, default=7.0)
+    width_ft = Column(Float, default=5.0)
+    height_ft = Column(Float, default=5.0)
+
     current_location = Column(String(255), nullable=True)
+    home_location = Column(String(255), nullable=True)
     status = Column(SAEnum(VehicleStatus), default=VehicleStatus.AVAILABLE)
+    availability = Column(Boolean, default=True)
+
+    vehicle_age_years = Column(Float, default=2.0)
+    vehicle_age = Column(Float, default=2.0)
+    mileage = Column(Float, default=45000.0)
+    efficiency = Column(Float, default=1.0)
+    fuel_efficiency = Column(Float, default=14.0)  # km/l or km/kWh
+    rating = Column(Float, default=4.7)
+
+    total_deliveries = Column(Integer, default=0)
+    successful_deliveries = Column(Integer, default=0)
+
+    insurance_expiry = Column(String(50), nullable=True)
+    fitness_expiry = Column(String(50), nullable=True)
+    last_service_date = Column(String(50), nullable=True)
+
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    owner = relationship("User", back_populates="vehicles")
-    provider = relationship("Provider", back_populates="vehicles")
+    owner = relationship("User", back_populates="vehicles", foreign_keys=[owner_id])
+    provider = relationship("Provider", back_populates="vehicles", foreign_keys=[provider_id])
+    driver = relationship("Driver", foreign_keys=[driver_id], post_update=True)
     bookings = relationship("Booking", back_populates="vehicle")
     ml_predictions = relationship("MLPrediction", back_populates="vehicle")
+    assignments = relationship("VehicleAssignment", back_populates="vehicle")
 
 
 # ──────────────────────────────────────────
@@ -174,6 +263,9 @@ class TransportRequest(Base):
     cargo_type = Column(String(100), nullable=False)
     cargo_weight_kg = Column(Float, nullable=False)
     cargo_volume_m3 = Column(Float, nullable=True)
+    cargo_length_m = Column(Float, nullable=True)
+    cargo_width_m = Column(Float, nullable=True)
+    cargo_height_m = Column(Float, nullable=True)
     cargo_dimensions = Column(String(255), nullable=True)
     vehicle_type_preference = Column(String(100), nullable=True)
     deadline = Column(DateTime, nullable=True)
@@ -188,11 +280,35 @@ class TransportRequest(Base):
     booking = relationship("Booking", back_populates="request", uselist=False)
     ml_predictions = relationship("MLPrediction", back_populates="request")
     ai_recommendation = relationship("AIRecommendation", back_populates="request", uselist=False)
+    assignments = relationship("VehicleAssignment", back_populates="request")
 
     __table_args__ = (
         Index("ix_transport_requests_business_id", "business_id"),
         Index("ix_transport_requests_status", "status"),
     )
+
+
+# ──────────────────────────────────────────
+# Vehicle Assignment
+# ──────────────────────────────────────────
+
+class VehicleAssignment(Base):
+    __tablename__ = "vehicle_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=False)
+    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)
+    request_id = Column(Integer, ForeignKey("transport_requests.id"), nullable=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
+    status = Column(String(50), default="ACTIVE")
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    released_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    vehicle = relationship("Vehicle", back_populates="assignments")
+    driver = relationship("Driver")
+    request = relationship("TransportRequest", back_populates="assignments")
+    booking = relationship("Booking", back_populates="assignments")
 
 
 # ──────────────────────────────────────────
@@ -211,8 +327,11 @@ class Booking(Base):
     estimated_eta_hours = Column(Float, nullable=False)
     match_score = Column(Float, nullable=True)
     status = Column(SAEnum(BookingStatus), default=BookingStatus.CONFIRMED)
-    commission_rate = Column(Float, default=0.05)
-    driva_commission = Column(Float, nullable=True)
+
+    # DRIVA Service Fee (transparent 5%)
+    driva_fee_rate = Column(Float, default=0.05)
+    driva_service_fee = Column(Float, nullable=True)
+
     pickup_time = Column(DateTime, nullable=True)
     delivered_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -224,6 +343,7 @@ class Booking(Base):
     driver = relationship("Driver", back_populates="bookings")
     rating = relationship("Rating", back_populates="booking", uselist=False)
     tracking_updates = relationship("TrackingUpdate", back_populates="booking")
+    assignments = relationship("VehicleAssignment", back_populates="booking")
 
     __table_args__ = (
         Index("ix_bookings_provider_id", "provider_id"),
@@ -232,7 +352,7 @@ class Booking(Base):
 
 
 # ──────────────────────────────────────────
-# Tracking
+# Tracking Update (Delivery Status)
 # ──────────────────────────────────────────
 
 class TrackingUpdate(Base):
@@ -258,6 +378,8 @@ class Rating(Base):
     id = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=False, unique=True)
     rater_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
+    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)
     overall_rating = Column(Float, nullable=False)  # 1-5
     timeliness_rating = Column(Float, nullable=True)
     cost_rating = Column(Float, nullable=True)
@@ -267,6 +389,24 @@ class Rating(Base):
 
     booking = relationship("Booking", back_populates="rating")
     rater = relationship("User", back_populates="ratings_given", foreign_keys=[rater_id])
+
+
+# ──────────────────────────────────────────
+# Notification
+# ──────────────────────────────────────────
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    notification_type = Column(String(50), default="INFO")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="notifications")
 
 
 # ──────────────────────────────────────────
@@ -304,6 +444,7 @@ class AIRecommendation(Base):
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(Integer, ForeignKey("transport_requests.id"), nullable=False, unique=True)
     recommended_provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
+    recommended_vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=True)
     match_score = Column(Float, nullable=True)
     reasoning = Column(Text, nullable=True)
     groq_explanation = Column(Text, nullable=True)

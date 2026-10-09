@@ -101,8 +101,10 @@ def ai_health():
 
 @router.get("/ml-status")
 def ml_health():
-    from ml.inference.predict import models_loaded
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent / "ml"))
+    repo_root = Path(__file__).resolve().parents[4]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from ml.inference.predict import models_loaded
     return models_loaded()

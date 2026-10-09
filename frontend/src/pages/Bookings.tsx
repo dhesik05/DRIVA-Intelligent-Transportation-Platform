@@ -164,7 +164,7 @@ export default function Bookings() {
                     <td className="px-4 py-3.5 font-bold text-slate-900">
                       ₹{Math.round(b.quoted_price).toLocaleString()}
                       <div className="text-[10px] text-slate-400 font-normal">
-                        Service Fee: ₹{Math.round(b.driva_commission || b.quoted_price * 0.05)} (5%)
+                        5% DRIVA Service Fee: ₹{Math.round(b.driva_service_fee || b.quoted_price * 0.05)}
                       </div>
                     </td>
                     <td className="px-4 py-3.5">

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import type { BusinessAnalytics } from '../../types';
+import type { BusinessDashboardData } from '../../types';
 import {
   Package, MapPin, TrendingUp, Clock, PlusCircle,
   Sparkles, ChevronRight, ShieldCheck, DollarSign,
@@ -8,7 +8,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface BusinessDashboardViewProps {
-  analytics: BusinessAnalytics | null;
+  data: BusinessDashboardData;
   userName?: string;
 }
 
@@ -27,15 +27,15 @@ const priorityColor: Record<string, string> = {
   URGENT: 'badge-red',
 };
 
-const monthlyData = [
-  { month: 'Jul', spend: 42000, savings: 5800 },
-  { month: 'Aug', spend: 58000, savings: 8100 },
-  { month: 'Sep', spend: 51000, savings: 7100 },
-  { month: 'Oct', spend: 67000, savings: 9400 },
-];
-
-export default function BusinessDashboardView({ analytics: ba, userName }: BusinessDashboardViewProps) {
+export default function BusinessDashboardView({ data, userName }: BusinessDashboardViewProps) {
   const navigate = useNavigate();
+
+  const monthlyData = data.trend_data && data.trend_data.length > 0 ? data.trend_data : [
+    { month: 'Jul', spend: Math.round(data.total_spend * 0.15), savings: Math.round(data.total_spend * 0.02) },
+    { month: 'Aug', spend: Math.round(data.total_spend * 0.25), savings: Math.round(data.total_spend * 0.035) },
+    { month: 'Sep', spend: Math.round(data.total_spend * 0.28), savings: Math.round(data.total_spend * 0.04) },
+    { month: 'Oct', spend: Math.round(data.total_spend * 0.32), savings: Math.round(data.total_spend * 0.045) },
+  ];
 
   return (
     <div className="space-y-6">
@@ -107,51 +107,51 @@ export default function BusinessDashboardView({ analytics: ba, userName }: Busin
       {/* Primary Procurement KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="stat-card">
-          <div className="text-xs text-slate-500 mb-1">Active Requests</div>
-          <div className="text-2xl font-bold text-slate-900">{ba?.total_requests ?? 2}</div>
+          <div className="text-xs text-slate-500 mb-1">Total Requests</div>
+          <div className="text-2xl font-bold text-slate-900">{data.total_requests}</div>
           <div className="text-[10px] text-blue-600 font-semibold mt-1 flex items-center gap-1">
             <Package className="w-3 h-3" />
-            <span>In matching</span>
+            <span>Procurement demands</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <div className="text-xs text-slate-500 mb-1">Active Deliveries</div>
-          <div className="text-2xl font-bold text-slate-900">{ba?.active_deliveries ?? 1}</div>
+          <div className="text-xs text-slate-500 mb-1">Active Shipments</div>
+          <div className="text-2xl font-bold text-slate-900">{data.active_shipments}</div>
           <div className="text-[10px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
             <MapPin className="w-3 h-3" />
-            <span>En route NH44</span>
+            <span>En route corridor</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <div className="text-xs text-slate-500 mb-1">Delivered Consignments</div>
-          <div className="text-2xl font-bold text-slate-900">{ba?.completed_deliveries ?? 18}</div>
+          <div className="text-xs text-slate-500 mb-1">Completed Deliveries</div>
+          <div className="text-2xl font-bold text-slate-900">{data.completed_deliveries}</div>
           <div className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
             <ShieldCheck className="w-3 h-3" />
-            <span>100% SLA met</span>
+            <span>Delivered consignments</span>
           </div>
         </div>
 
         <div className="stat-card">
-          <div className="text-xs text-slate-500 mb-1">Procurement Spend</div>
+          <div className="text-xs text-slate-500 mb-1">Total Spend</div>
           <div className="text-2xl font-bold text-slate-900">
-            {ba?.total_spend ? `₹${(ba.total_spend / 1000).toFixed(1)}K` : '₹42.5K'}
+            ₹{Number(data.total_spend).toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-slate-400 mt-1">Audited freight</div>
         </div>
 
         <div className="stat-card">
-          <div className="text-xs text-slate-500 mb-1">Estimated Savings</div>
-          <div className="text-2xl font-bold text-emerald-700">
-            {ba?.total_spend ? `₹${((ba.total_spend * 0.14) / 1000).toFixed(1)}K` : '₹6.2K'}
+          <div className="text-xs text-slate-500 mb-1">Avg Transport Cost</div>
+          <div className="text-2xl font-bold text-slate-900">
+            ₹{Number(data.avg_transport_cost).toLocaleString('en-IN')}
           </div>
-          <div className="text-[10px] text-emerald-600 font-semibold mt-1">~14% vs spot brokers</div>
+          <div className="text-[10px] text-slate-400 mt-1">Per delivery</div>
         </div>
 
         <div className="stat-card">
           <div className="text-xs text-slate-500 mb-1">Avg Match Score</div>
-          <div className="text-2xl font-bold text-blue-700">91.4<span className="text-xs text-slate-400">/100</span></div>
+          <div className="text-2xl font-bold text-blue-700">{data.avg_match_score}<span className="text-xs text-slate-400">/100</span></div>
           <div className="text-[10px] text-blue-600 font-semibold mt-1">7-factor weighted</div>
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function BusinessDashboardView({ analytics: ba, userName }: Busin
       </div>
 
       {/* Recent Requests Table */}
-      {ba?.recent_requests && ba.recent_requests.length > 0 && (
+      {data.recent_requests && data.recent_requests.length > 0 && (
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <div>
@@ -241,7 +241,7 @@ export default function BusinessDashboardView({ analytics: ba, userName }: Busin
                 </tr>
               </thead>
               <tbody>
-                {ba.recent_requests.slice(0, 5).map((r) => (
+                {data.recent_requests.slice(0, 5).map((r) => (
                   <tr key={r.id}>
                     <td>
                       <div className="font-semibold text-slate-900">{r.pickup_location} → {r.destination}</div>
@@ -251,7 +251,7 @@ export default function BusinessDashboardView({ analytics: ba, userName }: Busin
                     <td className="font-mono font-medium">{r.cargo_weight_kg} kg</td>
                     <td><span className={`badge ${priorityColor[r.priority]}`}>{r.priority}</span></td>
                     <td><span className={`badge ${statusColor[r.status]}`}>{r.status}</span></td>
-                    <td className="text-slate-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td className="text-slate-500 text-xs">{new Date(r.created_at || Date.now()).toLocaleDateString()}</td>
                     <td>
                       {r.status === 'MATCHED' || r.status === 'PENDING' ? (
                         <Link to={`/matching/${r.id}`} className="text-xs text-blue-700 hover:underline font-bold">

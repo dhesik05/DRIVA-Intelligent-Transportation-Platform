@@ -17,6 +17,7 @@ import Fleet from './pages/Fleet';
 import Analytics from './pages/Analytics';
 import AiAssistant from './pages/AiAssistant';
 import Settings from './pages/Settings';
+import AdminEntities from './pages/AdminEntities';
 
 export default function App() {
   return (
@@ -67,7 +68,7 @@ export default function App() {
           <Route path="/fleet/vehicles" element={<AppLayout><Fleet /></AppLayout>} />
           <Route path="/fleet/availability" element={<AppLayout><Fleet /></AppLayout>} />
           <Route path="/fleet/allocation" element={<AppLayout><Fleet /></AppLayout>} />
-          <Route path="/fleet/requests" element={<AppLayout><Bookings /></AppLayout>} />
+          <Route path="/fleet/requests" element={<AppLayout><MyRequests /></AppLayout>} />
           <Route path="/fleet/jobs" element={<AppLayout><Bookings /></AppLayout>} />
           <Route path="/fleet/deliveries" element={<AppLayout><Tracking /></AppLayout>} />
           <Route path="/fleet/drivers" element={<AppLayout><Fleet /></AppLayout>} />
@@ -77,7 +78,7 @@ export default function App() {
 
           {/* Dedicated Logistics Agency Brokerage Sub-Routes */}
           <Route path="/agency" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/agency/requests" element={<AppLayout><Bookings /></AppLayout>} />
+          <Route path="/agency/requests" element={<AppLayout><MyRequests /></AppLayout>} />
           <Route path="/agency/capacity" element={<AppLayout><Fleet /></AppLayout>} />
           <Route path="/agency/matching" element={<AppLayout><MyRequests /></AppLayout>} />
           <Route path="/agency/bookings" element={<AppLayout><Bookings /></AppLayout>} />
@@ -100,11 +101,16 @@ export default function App() {
 
           {/* Dedicated Admin Governance Sub-Routes */}
           <Route path="/admin" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/admin/users" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/admin/businesses" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/admin/providers" element={<AppLayout><Fleet /></AppLayout>} />
-          <Route path="/admin/fleet" element={<AppLayout><Fleet /></AppLayout>} />
-          <Route path="/admin/bookings" element={<AppLayout><Bookings /></AppLayout>} />
+          <Route path="/admin/users" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/businesses" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/providers" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/fleets" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/agencies" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/fleet" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/drivers" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/vehicles" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/bookings" element={<AppLayout><AdminEntities /></AppLayout>} />
+          <Route path="/admin/requests" element={<AppLayout><MyRequests /></AppLayout>} />
           <Route path="/admin/analytics" element={<AppLayout><Analytics /></AppLayout>} />
           <Route path="/admin/revenue" element={<AppLayout><Analytics /></AppLayout>} />
           <Route path="/admin/service-fee" element={<AppLayout><Analytics /></AppLayout>} />

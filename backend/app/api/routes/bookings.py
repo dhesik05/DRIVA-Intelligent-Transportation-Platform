@@ -57,8 +57,8 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db), current_u
         quoted_price=quoted_price,
         estimated_eta_hours=eta_hours,
         match_score=match_score,
-        commission_rate=0.05,
-        driva_commission=commission,
+        driva_fee_rate=0.05,
+        driva_service_fee=commission,
         status=BookingStatus.CONFIRMED,
     )
     db.add(booking)
@@ -195,3 +195,74 @@ def get_tracking(booking_id: int, db: Session = Depends(get_db), current_user: U
             for u in updates
         ],
     }
+
+
+deliveries_router = APIRouter(prefix="/api/deliveries", tags=["Deliveries"])
+
+@deliveries_router.get("")
+def list_deliveries(
+    active_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retrieve consignment deliveries with route, telemetry, and carrier status."""
+    q = (
+        db.query(Booking)
+        .options(
+            joinedload(Booking.provider),
+            joinedload(Booking.vehicle),
+            joinedload(Booking.driver),
+            joinedload(Booking.request),
+            joinedload(Booking.tracking_updates),
+        )
+    )
+    if active_only:
+        q = q.filter(Booking.status.in_([
+            BookingStatus.CONFIRMED,
+            BookingStatus.DRIVER_ASSIGNED,
+            BookingStatus.VEHICLE_ARRIVED,
+            BookingStatus.PICKUP_COMPLETED,
+            BookingStatus.IN_TRANSIT,
+            BookingStatus.NEAR_DESTINATION,
+        ]))
+
+    bookings = q.order_by(Booking.updated_at.desc()).all()
+    results = []
+    for b in bookings:
+        req = b.request
+        v = b.vehicle
+        d = b.driver
+        p = b.provider
+        results.append({
+            "id": b.id,
+            "request_id": b.request_id,
+            "booking_id": b.id,
+            "pickup_location": req.pickup_location if req else "Salem",
+            "destination": req.destination if req else "Bangalore",
+            "cargo_type": req.cargo_type if req else "General Freight",
+            "cargo_weight_kg": req.cargo_weight_kg if req else 0,
+            "status": b.status.value if hasattr(b.status, "value") else str(b.status),
+            "quoted_price": b.quoted_price,
+            "estimated_eta_hours": b.estimated_eta_hours,
+            "match_score": b.match_score,
+            "driva_service_fee": b.driva_service_fee or (b.quoted_price * 0.05),
+            "vehicle": {
+                "id": v.id if v else None,
+                "type": v.vehicle_type if v else None,
+                "registration": v.registration_number or v.vehicle_number if v else None,
+            } if v else None,
+            "driver": {
+                "id": d.id if d else None,
+                "name": d.name if d else None,
+                "phone": d.phone if d else None,
+            } if d else None,
+            "provider": {
+                "id": p.id if p else None,
+                "name": p.company_name if p else None,
+            } if p else None,
+            "pickup_time": b.pickup_time.isoformat() if b.pickup_time else None,
+            "delivered_time": b.delivered_time.isoformat() if b.delivered_time else None,
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+        })
+    return results
+

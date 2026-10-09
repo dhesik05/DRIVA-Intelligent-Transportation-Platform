@@ -168,7 +168,7 @@ def test_complete_driva_lifecycle():
     assert admin_data["driva_revenue"] > 0, "Revenue should be > 0"
     print("✓ 10. Admin Platform Analytics Verified:")
     print(f"      Total GMV Volume:   ₹{admin_data['total_gmv']:,.2f}")
-    print(f"      DRIVA Commission:   ₹{admin_data['driva_revenue']:,.2f}")
+    print(f"      5% DRIVA Service Fee: ₹{admin_data['driva_revenue']:,.2f}")
     print(f"      Active Carriers:    {admin_data['active_providers']}")
     print(f"      Average Match Score:{admin_data['avg_match_score']:.1f}/100")
 

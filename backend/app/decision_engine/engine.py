@@ -141,12 +141,20 @@ def _normalize_max_better(value: float, candidates_values: List[float]) -> float
 
 
 VEHICLE_DIMS = {
-    "Tata Ace": {"length": 2.1, "width": 1.4, "height": 1.5, "volume": 4.4},
-    "Bolero Pickup": {"length": 2.5, "width": 1.5, "height": 1.5, "volume": 5.6},
+    "Tata Ace": {"length": 2.14, "width": 1.52, "height": 1.52, "volume": 4.0},
+    "Mahindra Bolero Pickup": {"length": 2.6, "width": 1.68, "height": 1.68, "volume": 5.5},
+    "Bolero Pickup": {"length": 2.6, "width": 1.68, "height": 1.68, "volume": 5.5},
+    "Tata Intra V30": {"length": 2.68, "width": 1.70, "height": 1.68, "volume": 6.0},
+    "Ashok Leyland Dost": {"length": 2.9, "width": 1.77, "height": 1.83, "volume": 7.0},
     "Mini Truck": {"length": 3.0, "width": 1.6, "height": 1.6, "volume": 7.6},
-    "EV Cargo Van": {"length": 2.8, "width": 1.5, "height": 1.5, "volume": 6.3},
+    "Tata 407": {"length": 3.66, "width": 1.98, "height": 1.98, "volume": 12.0},
     "Light Commercial": {"length": 3.5, "width": 1.8, "height": 1.8, "volume": 11.3},
-    "Medium Truck": {"length": 5.0, "width": 2.0, "height": 2.0, "volume": 20.0},
+    "EV Cargo Van": {"length": 2.74, "width": 1.68, "height": 1.68, "volume": 7.0},
+    "Tata 709": {"length": 5.18, "width": 2.13, "height": 2.29, "volume": 25.0},
+    "Eicher Pro 2049": {"length": 5.79, "width": 2.19, "height": 2.29, "volume": 28.0},
+    "Tata 1109": {"length": 6.40, "width": 2.29, "height": 2.44, "volume": 35.0},
+    "Medium Truck": {"length": 5.5, "width": 2.1, "height": 2.2, "volume": 25.0},
+    "BharatBenz 1217": {"length": 7.32, "width": 2.44, "height": 2.59, "volume": 40.0},
     "Heavy Truck": {"length": 7.0, "width": 2.4, "height": 2.4, "volume": 40.0},
 }
 
@@ -159,43 +167,51 @@ def apply_hard_constraints(
     cargo_height_m: Optional[float] = None,
     cargo_volume_m3: Optional[float] = None,
 ) -> tuple[List[CandidateOption], List[tuple[CandidateOption, str]]]:
-    """Filter out vehicles that cannot service the request."""
+    """Filter out vehicles that cannot physically service the cargo requirement."""
     valid = []
     rejected = []
 
     for c in candidates:
-        # Hard: insufficient capacity
+        # Hard 1: Capacity check
         if cargo_weight_kg > c.capacity_kg:
-            rejected.append((c, f"Insufficient capacity ({c.capacity_kg} kg < {cargo_weight_kg} kg needed)"))
+            rejected.append((c, f"Insufficient capacity ({c.capacity_kg:.0f} kg < {cargo_weight_kg:.0f} kg cargo)"))
             continue
 
-        # Hard: not available
+        # Hard 2: Availability check
         if not c.is_available:
-            rejected.append((c, "Vehicle not available"))
+            rejected.append((c, "Vehicle is currently offline or in maintenance"))
             continue
 
-        # Hard: impossible deadline (with 10% buffer)
-        if deadline_hours is not None and c.predicted_eta_hours > deadline_hours * 1.1:
-            rejected.append((c, f"Cannot meet deadline (ETA {c.predicted_eta_hours:.1f}h > deadline {deadline_hours:.1f}h)"))
-            continue
+        # Hard 3: Physical dimension checks
+        avail_len = c.usable_length_m or VEHICLE_DIMS.get(c.vehicle_type, {}).get("length", 3.0)
+        avail_wid = c.usable_width_m or VEHICLE_DIMS.get(c.vehicle_type, {}).get("width", 1.6)
+        avail_hgt = c.usable_height_m or VEHICLE_DIMS.get(c.vehicle_type, {}).get("height", 1.6)
+        avail_vol = c.usable_volume_m3 or VEHICLE_DIMS.get(c.vehicle_type, {}).get("volume", 7.0)
 
-        # Hard: dimensions
-        dims = VEHICLE_DIMS.get(c.vehicle_type)
-        if dims:
-            if cargo_length_m is not None and cargo_length_m > dims["length"]:
-                rejected.append((c, f"Cargo too long ({cargo_length_m}m > {dims['length']}m)"))
-                continue
-            if cargo_width_m is not None and cargo_width_m > dims["width"]:
-                rejected.append((c, f"Cargo too wide ({cargo_width_m}m > {dims['width']}m)"))
-                continue
-            if cargo_height_m is not None and cargo_height_m > dims["height"]:
-                rejected.append((c, f"Cargo too tall ({cargo_height_m}m > {dims['height']}m)"))
-                continue
-            if cargo_volume_m3 is not None and cargo_volume_m3 > dims["volume"]:
-                rejected.append((c, f"Cargo volume too large ({cargo_volume_m3}m3 > {dims['volume']}m3)"))
-                continue
+        if cargo_length_m is not None and cargo_length_m > avail_len:
+            rejected.append((c, f"Cargo length ({cargo_length_m:.1f}m) exceeds cargo bay ({avail_len:.1f}m)"))
+            continue
+        if cargo_width_m is not None and cargo_width_m > avail_wid:
+            rejected.append((c, f"Cargo width ({cargo_width_m:.1f}m) exceeds cargo bay ({avail_wid:.1f}m)"))
+            continue
+        if cargo_height_m is not None and cargo_height_m > avail_hgt:
+            rejected.append((c, f"Cargo height ({cargo_height_m:.1f}m) exceeds cargo bay ({avail_hgt:.1f}m)"))
+            continue
+        if cargo_volume_m3 is not None and cargo_volume_m3 > avail_vol:
+            rejected.append((c, f"Cargo volume ({cargo_volume_m3:.1f}m³) exceeds capacity ({avail_vol:.1f}m³)"))
+            continue
 
         valid.append(c)
+
+    # Secondary check: If deadline is specified, only filter if at least one candidate meets it
+    if deadline_hours is not None and valid:
+        within_deadline = [c for c in valid if c.predicted_eta_hours <= deadline_hours * 1.25]
+        if within_deadline:
+            # Keep those within deadline
+            for c in valid:
+                if c not in within_deadline:
+                    rejected.append((c, f"Cannot meet deadline (ETA {c.predicted_eta_hours:.1f}h > {deadline_hours:.1f}h)"))
+            valid = within_deadline
 
     if rejected:
         for c, reason in rejected:

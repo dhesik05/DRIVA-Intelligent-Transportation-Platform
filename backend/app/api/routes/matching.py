@@ -2,63 +2,124 @@
 DRIVA Matching API
 ==================
 The core intelligence endpoint.
-Flow: Request → Available Vehicles → ML Predictions → Decision Engine → Ranked Results + Groq explanation
+Pipeline:
+Transport Request
+    ↓
+Fetch Available Vehicles
+    ↓
+Hard Constraint Filtering (Capacity, Dimensions, Availability)
+    ↓
+ML Cost Prediction
+    ↓
+ML ETA Prediction
+    ↓
+Suitability Prediction
+    ↓
+Decision Engine (Multi-criteria Scoring)
+    ↓
+Ranking & Recommendations + Groq Natural Language Explanation
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from typing import List
-
-from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models import (
-    TransportRequest, Vehicle, Provider, Driver, VehicleStatus,
-    MLPrediction, AIRecommendation, RequestStatus, User
-)
-from app.schemas import MatchResponse, MatchOption
-from app.decision_engine.engine import CandidateOption, score_and_rank, get_distance
-from app.ai.groq_service import explain_recommendation
+from datetime import datetime
+from typing import List, Optional
+import logging
 
 import sys
 from pathlib import Path
 repo_root = Path(__file__).resolve().parents[4]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
-if str(repo_root / "ml") not in sys.path:
-    sys.path.insert(0, str(repo_root / "ml"))
+
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models import (
+    TransportRequest, Vehicle, Provider, Driver, VehicleStatus,
+    MLPrediction, AIRecommendation, RequestStatus, User, FuelType
+)
+from app.schemas import MatchResponse, MatchOption
+from app.decision_engine.engine import CandidateOption, score_and_rank, get_distance, VEHICLE_DIMS
+from app.ai.groq_service import explain_recommendation
+
+logger = logging.getLogger("driva.matching")
 
 router = APIRouter(prefix="/api/matching", tags=["Smart Match"])
 
-# Default traffic/weather factors for matching
 DEFAULT_TRAFFIC = 1.15
 DEFAULT_WEATHER = 1.05
 
 
-def _predict(vehicle: Vehicle, request: TransportRequest, provider: Provider):
-    """Run ML predictions for a single vehicle/request pair."""
-    from ml.inference.predict import predict_cost, predict_eta, predict_suitability
+def _predict(vehicle: Vehicle, request: TransportRequest, provider: Provider, db: Session):
+    """Run ML predictions for a single vehicle/request pair with robust fallback."""
+    from app.services.ml_service import predict_cost, predict_eta, predict_suitability
 
     dist = request.estimated_distance_km or get_distance(request.pickup_location, request.destination)
     cargo_vol = request.cargo_volume_m3 or (request.cargo_weight_kg / 350.0)
     priority = request.priority.value if request.priority else "NORMAL"
+    route = f"{request.pickup_location}_{request.destination}"
 
     deadline_hours = None
     if request.deadline:
         delta = request.deadline - datetime.utcnow()
-        deadline_hours = max(0.1, delta.total_seconds() / 3600)
+        deadline_hours = max(0.5, delta.total_seconds() / 3600)
+        
+    cargo_len = 1.0
+    cargo_wid = 1.0
+    cargo_hgt = 1.0
+    if request.cargo_dimensions:
+        try:
+            parts = [float(p.strip()) for p in request.cargo_dimensions.lower().replace("m", "").split("x")]
+            if len(parts) == 3:
+                cargo_len, cargo_wid, cargo_hgt = parts
+        except Exception:
+            pass
+
+    fuel_val = vehicle.fuel_type.value if hasattr(vehicle.fuel_type, "value") else str(vehicle.fuel_type)
+    
+    # Real dimensions from vehicle (convert ft to meters: 1 ft = 0.3048 m)
+    v_len_m = (vehicle.length_ft * 0.3048) if vehicle.length_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("length", 3.0)
+    v_wid_m = (vehicle.width_ft * 0.3048) if vehicle.width_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("width", 1.6)
+    v_hgt_m = (vehicle.height_ft * 0.3048) if vehicle.height_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("height", 1.6)
+    v_vol_m3 = vehicle.volume_m3 or vehicle.capacity_volume_m3 or (v_len_m * v_wid_m * v_hgt_m)
+    
+    # Resolve driver
+    driver = None
+    if vehicle.driver_id:
+        driver = db.query(Driver).filter(Driver.id == vehicle.driver_id).first()
+    if not driver and provider:
+        driver = (
+            db.query(Driver)
+            .filter(
+                (Driver.provider_id == provider.id) |
+                (Driver.user_id == provider.user_id)
+            )
+            .first()
+        )
+
+    provider_rating = provider.provider_rating if provider else 4.5
+    driver_exp = driver.experience_years if driver else 4.0
+    v_age = vehicle.vehicle_age_years or 2.0
+    v_eff = vehicle.efficiency or 1.0
 
     cost, cost_fallback = predict_cost(
         distance_km=dist,
         cargo_weight_kg=request.cargo_weight_kg,
         cargo_volume_m3=cargo_vol,
-        fuel_type=vehicle.fuel_type.value,
-        vehicle_type=vehicle.vehicle_type,
         vehicle_capacity_kg=vehicle.capacity_kg,
-        vehicle_age_years=vehicle.vehicle_age_years,
-        vehicle_efficiency=vehicle.efficiency,
+        vehicle_volume_m3=v_vol_m3,
+        vehicle_age_years=v_age,
+        vehicle_efficiency=v_eff,
+        fuel_or_energy_cost=dist * 18.0,
         traffic_factor=DEFAULT_TRAFFIC,
         weather_factor=DEFAULT_WEATHER,
-        priority=priority,
+        provider_rating=provider_rating,
+        driver_experience_years=driver_exp,
+        historical_cost=dist * 20.0,
+        vehicle_type=vehicle.vehicle_type,
+        fuel_type=fuel_val,
+        route=route,
+        delivery_priority=priority,
     )
 
     eta, eta_fallback = predict_eta(
@@ -67,42 +128,35 @@ def _predict(vehicle: Vehicle, request: TransportRequest, provider: Provider):
         traffic_factor=DEFAULT_TRAFFIC,
         weather_factor=DEFAULT_WEATHER,
         vehicle_type=vehicle.vehicle_type,
-        vehicle_efficiency=vehicle.efficiency,
-        vehicle_age_years=vehicle.vehicle_age_years,
-        priority=priority,
+        vehicle_capacity_kg=vehicle.capacity_kg,
+        vehicle_efficiency=v_eff,
+        driver_experience_years=driver_exp,
+        historical_delivery_time_hours=(dist / 55.0),
+        delivery_priority=priority,
+        route=route,
     )
-
-    driver = None
-    if provider:
-        driver = (
-            db_session_ref[0].query(Driver)
-            .filter(Driver.user_id == provider.user_id, Driver.is_available == True)
-            .first()
-        )
 
     suit, suit_fallback = predict_suitability(
-        distance_km=dist,
         cargo_weight_kg=request.cargo_weight_kg,
+        cargo_volume_m3=cargo_vol,
+        cargo_length_m=cargo_len,
+        cargo_width_m=cargo_wid,
+        cargo_height_m=cargo_hgt,
         vehicle_capacity_kg=vehicle.capacity_kg,
-        vehicle_availability=1 if vehicle.status == VehicleStatus.AVAILABLE else 0,
-        deadline_hours=deadline_hours or 24.0,
-        estimated_eta_hours=eta,
-        provider_rating=provider.provider_rating if provider else 4.0,
-        driver_experience_years=driver.experience_years if driver else 3.0,
-        vehicle_efficiency=vehicle.efficiency,
-        vehicle_age_years=vehicle.vehicle_age_years,
-        traffic_factor=DEFAULT_TRAFFIC,
-        weather_factor=DEFAULT_WEATHER,
-        fuel_type=vehicle.fuel_type.value,
-        priority=priority,
+        vehicle_volume_m3=v_vol_m3,
+        vehicle_length_m=v_len_m,
+        vehicle_width_m=v_wid_m,
+        vehicle_height_m=v_hgt_m,
         vehicle_type=vehicle.vehicle_type,
+        fuel_type=fuel_val,
+        provider_rating=provider_rating,
+        driver_experience_years=driver_exp,
+        vehicle_availability=1 if vehicle.status == VehicleStatus.AVAILABLE else 0,
+        route=route,
+        delivery_priority=priority,
     )
 
-    return cost, eta, suit, cost_fallback or eta_fallback or suit_fallback
-
-
-# Thread-local for passing db to _predict
-db_session_ref = [None]
+    return cost, eta, suit, (cost_fallback or eta_fallback or suit_fallback), driver
 
 
 @router.post("/{request_id}", response_model=MatchResponse)
@@ -111,19 +165,13 @@ def run_matching(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    db_session_ref[0] = db
-
     req = db.query(TransportRequest).filter(TransportRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Transport request not found")
-    if req.business_id != current_user.id and current_user.role.value != "ADMIN":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
-    import logging
-    logger = logging.getLogger("driva.matching")
-    logger.info(f"STARTING MATCH for request {req.id} with cargo weight {req.cargo_weight_kg} kg")
+    logger.info(f"[DRIVA MATCH] Starting evaluation for request #{req.id}: {req.pickup_location} → {req.destination}, Cargo: {req.cargo_weight_kg}kg ({req.cargo_type})")
 
-    # Get all available vehicles with providers
+    # Fetch all active vehicles with their providers
     vehicles_with_providers = (
         db.query(Vehicle, Provider)
         .join(Provider, Vehicle.provider_id == Provider.id)
@@ -136,13 +184,13 @@ def run_matching(
     )
 
     if not vehicles_with_providers:
-        logger.info("AFTER FILTERING: 0 vehicles available in DB")
+        logger.warning("[DRIVA MATCH] No available vehicles registered in carrier network")
         raise HTTPException(
             status_code=404,
-            detail="No suitable transportation is currently available. Please try again later.",
+            detail="No carrier vehicles are currently available for allocation. Please try again later.",
         )
 
-    # Calculate deadline hours
+    # Compute deadline hours
     deadline_hours = None
     if req.deadline:
         delta = req.deadline - datetime.utcnow()
@@ -153,7 +201,11 @@ def run_matching(
     predictions_to_save = []
 
     for vehicle, provider in vehicles_with_providers:
-        cost, eta, suit, used_fallback = _predict(vehicle, req, provider)
+        try:
+            cost, eta, suit, used_fallback, driver = _predict(vehicle, req, provider, db)
+        except Exception as e:
+            logger.error(f"Error predicting vehicle {vehicle.vehicle_number}: {e}")
+            continue
 
         predictions_to_save.append(MLPrediction(
             request_id=req.id,
@@ -164,44 +216,44 @@ def run_matching(
             used_fallback=used_fallback,
         ))
 
-        driver = (
-            db.query(Driver)
-            .filter(Driver.user_id == provider.user_id, Driver.is_available == True)
-            .first()
-        )
-        from app.decision_engine.engine import VEHICLE_DIMS
-        vdims = VEHICLE_DIMS.get(vehicle.vehicle_type, {"length": 3.0, "width": 1.6, "height": 1.6, "volume": 7.6})
+        # Real dimensions from vehicle (convert ft to meters: 1 ft = 0.3048 m)
+        v_len_m = (vehicle.length_ft * 0.3048) if vehicle.length_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("length", 3.0)
+        v_wid_m = (vehicle.width_ft * 0.3048) if vehicle.width_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("width", 1.6)
+        v_hgt_m = (vehicle.height_ft * 0.3048) if vehicle.height_ft else VEHICLE_DIMS.get(vehicle.vehicle_type, {}).get("height", 1.6)
+        v_vol_m3 = vehicle.volume_m3 or vehicle.capacity_volume_m3 or (v_len_m * v_wid_m * v_hgt_m)
+
+        fuel_val = vehicle.fuel_type.value if hasattr(vehicle.fuel_type, "value") else str(vehicle.fuel_type)
 
         candidates.append(CandidateOption(
             provider_id=provider.id,
             provider_name=provider.company_name,
             vehicle_id=vehicle.id,
             vehicle_type=vehicle.vehicle_type,
-            fuel_type=vehicle.fuel_type.value,
+            fuel_type=fuel_val,
             capacity_kg=vehicle.capacity_kg,
             current_location=vehicle.current_location,
-            provider_reliability=provider.reliability_score,
+            provider_reliability=provider.reliability_score or 92.0,
             is_available=vehicle.status == VehicleStatus.AVAILABLE,
             predicted_cost=cost,
             predicted_eta_hours=eta,
             suitability_score=suit,
-            vehicle_efficiency=vehicle.efficiency,
+            vehicle_efficiency=vehicle.efficiency or 1.0,
             driver_experience=driver.experience_years if driver else 4.0,
-            vehicle_number=vehicle.vehicle_number,
-            provider_rating=provider.provider_rating if provider else 4.5,
-            usable_length_m=vdims["length"],
-            usable_width_m=vdims["width"],
-            usable_height_m=vdims["height"],
-            usable_volume_m3=vdims["volume"],
+            vehicle_number=vehicle.registration_number or vehicle.vehicle_number,
+            provider_rating=provider.provider_rating or 4.7,
+            usable_length_m=round(v_len_m, 2),
+            usable_width_m=round(v_wid_m, 2),
+            usable_height_m=round(v_hgt_m, 2),
+            usable_volume_m3=round(v_vol_m3, 2),
         ))
 
-    logger.info(f"AFTER ML: completed predictions for {len(candidates)} vehicles")
+    logger.info(f"[DRIVA MATCH] Built {len(candidates)} candidates for decision engine")
 
-    # Save ML predictions
+    # Persist predictions safely
     for pred in predictions_to_save:
         db.add(pred)
 
-    # Parse cargo dimensions
+    # Parse cargo dimensions if present
     cargo_len = None
     cargo_wid = None
     cargo_hgt = None
@@ -213,7 +265,7 @@ def run_matching(
         except Exception:
             pass
 
-    # Run decision engine
+    # Score and Rank via Decision Engine
     ranked = score_and_rank(
         candidates=candidates,
         cargo_weight_kg=req.cargo_weight_kg,
@@ -225,15 +277,15 @@ def run_matching(
         cargo_height_m=cargo_hgt,
         cargo_volume_m3=req.cargo_volume_m3,
     )
-    
-    logger.info(f"AFTER RANKING: {len(ranked)} vehicles successfully matched")
+
+    logger.info(f"[DRIVA MATCH] Decision engine ranked {len(ranked)} viable transportation solutions")
 
     if not ranked:
         req.status = RequestStatus.PENDING
         db.commit()
         raise HTTPException(
             status_code=422,
-            detail="No suitable transportation is currently available for your cargo requirements.",
+            detail="No carrier vehicles currently meet your cargo weight, volume, or dimensional constraints.",
         )
 
     # Build response options
@@ -285,10 +337,7 @@ def run_matching(
     best = ranked[0]
     alternatives = [o.model_dump() for o in options[1:4]]
 
-    # Groq explanation
-    best_vehicle = next(
-        (v for v, p in vehicles_with_providers if v.id == best.vehicle_id), None
-    )
+    # AI Explanation via Groq with safe fallback
     explanation, used_groq = explain_recommendation(
         pickup=req.pickup_location,
         destination=req.destination,
@@ -304,10 +353,11 @@ def run_matching(
         alternatives=alternatives,
     )
 
-    # Save AI recommendation
+    # Save recommendation
     existing_rec = db.query(AIRecommendation).filter(AIRecommendation.request_id == req.id).first()
     if existing_rec:
         existing_rec.recommended_provider_id = best.provider_id
+        existing_rec.recommended_vehicle_id = best.vehicle_id
         existing_rec.match_score = best.match_score
         existing_rec.groq_explanation = explanation
         existing_rec.used_groq = used_groq
@@ -315,8 +365,9 @@ def run_matching(
         db.add(AIRecommendation(
             request_id=req.id,
             recommended_provider_id=best.provider_id,
+            recommended_vehicle_id=best.vehicle_id,
             match_score=best.match_score,
-            reasoning=f"Rank 1 of {len(ranked)} options",
+            reasoning=f"Rank #1 of {len(ranked)} evaluated carriers",
             groq_explanation=explanation,
             used_groq=used_groq,
         ))
@@ -348,5 +399,5 @@ def get_match_results(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Re-fetch previously computed match results."""
+    """Re-fetch previously computed match results or evaluate."""
     return run_matching(request_id, db, current_user)

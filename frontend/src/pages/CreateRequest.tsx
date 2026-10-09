@@ -63,11 +63,7 @@ export default function CreateRequest() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    setSubmittingStep(1);
-
-    const t1 = setTimeout(() => setSubmittingStep(2), 200);
-    const t2 = setTimeout(() => setSubmittingStep(3), 400);
-    const t3 = setTimeout(() => setSubmittingStep(4), 600);
+    setSubmittingStep(1); // 1: Validating cargo requirements
 
     try {
       // Calculate realistic ISO deadline from selection
@@ -87,6 +83,8 @@ export default function CreateRequest() {
         }
       }
 
+      setSubmittingStep(2); // 2: Checking available vehicles
+
       const payload = {
         pickup_location: formData.pickup_location,
         destination: formData.destination,
@@ -103,33 +101,26 @@ export default function CreateRequest() {
         special_requirements: formData.special_requirements,
       };
 
-      console.log('Registering transport request:', payload);
+      setSubmittingStep(3); // 3: Checking cargo dimensions & payload fit
       const res = await transportApi.createRequest(payload);
-      
-      setSubmittingStep(4);
-      console.log('Evaluating Smart Match predictions for request:', res.id);
+
+      setSubmittingStep(4); // 4: Predicting cost and ETA with ML
       const matchResult = await matchingApi.runMatch(res.id);
-      
-      setSubmittingStep(5);
+
+      setSubmittingStep(5); // 5: Ranking transportation options
       toast.success('Transportation options evaluated successfully!');
-      
+
       // Navigate to matching results with the preloaded data available immediately
       navigate(`/matching/${res.id}`, { state: { matchData: matchResult } });
     } catch (err: any) {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
       const detail = err?.response?.data?.detail;
       const message = typeof detail === 'string'
         ? detail
         : Array.isArray(detail)
         ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
-        : 'Failed to create and evaluate transport request';
+        : 'No carrier vehicles currently available for this cargo requirement. Please check parameters.';
       toast.error(message);
     } finally {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
       setSubmitting(false);
     }
   };

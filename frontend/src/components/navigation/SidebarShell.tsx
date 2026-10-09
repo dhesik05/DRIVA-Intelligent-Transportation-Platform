@@ -14,11 +14,14 @@ export interface NavItemProps {
 
 export function NavItem({ to, icon: Icon, label, badge, badgeColor = 'blue', onClick }: NavItemProps) {
   const location = useLocation();
-  // Check active for exact match or path prefix (unless root dashboard)
-  const isBasePath = to === '/dashboard' || to === '/admin' || to === '/fleet' || to === '/agency' || to === '/driver';
-  const isActive = isBasePath 
-    ? location.pathname === to 
-    : location.pathname === to || location.pathname.startsWith(to + '/') || (location.pathname + location.search) === to;
+  // Ensure only one item is active by strictly comparing the full URL path + search
+  const currentPathWithSearch = location.pathname + location.search;
+  let isActive = false;
+  if (to === currentPathWithSearch) {
+    isActive = true;
+  } else if (to === location.pathname && location.search === '') {
+    isActive = true;
+  }
 
   const badgeColors: Record<string, string> = {
     blue: 'bg-blue-500/20 text-blue-300 border-blue-500/30',

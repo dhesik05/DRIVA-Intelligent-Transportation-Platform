@@ -19,7 +19,7 @@ def _get_groq_client():
         return None
     try:
         from groq import Groq
-        return Groq(api_key=settings.GROQ_API_KEY, timeout=4.0)
+        return Groq(api_key=settings.GROQ_API_KEY, timeout=2.0)
     except Exception as e:
         logger.warning(f"Failed to initialize Groq client: {e}")
         return None
